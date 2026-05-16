@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TimelineViewer</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="inputPanel" class="input-panel" aria-labelledby="input-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">BlueArchivePlayingTool</p>
+            <h1 id="input-title">TimelineViewer</h1>
+          </div>
+          <div class="input-actions">
+            <button id="toggleInputButton" class="secondary-button" type="button" aria-expanded="true">入力を表示</button>
+            <button id="loadButton" class="primary-button" type="button">読み込み</button>
+          </div>
+        </div>
+
+        <div id="inputBody" class="input-body">
+          <textarea
+            id="jsonInput"
+            class="json-input"
+            spellcheck="false"
+            placeholder="BlueArchivePlayingTool の Export でコピーした TimeLineData JSON を貼り付けてください。"
+            aria-label="TimeLineData JSON"
+          ></textarea>
+        </div>
+
+        <div id="message" class="message" role="status" aria-live="polite"></div>
+      </section>
+
+      <section id="emptyState" class="empty-state" aria-live="polite">
+        <h2>タイムライン JSON を読み込むと、キャラ別レーンで表示します。</h2>
+        <p>Export された `TimeLineData` 単体 JSON と、`TimeLineDataList` 形式の先頭データに対応しています。</p>
+      </section>
+
+      <section id="viewer" class="viewer is-hidden" aria-label="Timeline viewer">
+        <div class="legend" aria-label="Legend">
+          <span><i class="legend-dot legend-ex"></i>EX</span>
+          <span><i class="legend-dot legend-ns"></i>NS</span>
+          <span><i class="legend-dot legend-event"></i>Event</span>
+          <span><i class="legend-dot legend-disabled"></i>使用不可</span>
+        </div>
+
+        <section class="timeline-frame" aria-labelledby="chart-title">
+          <div class="timeline-heading">
+            <div>
+              <p id="timelineName" class="timeline-name">-</p>
+              <h3 id="chart-title">キャラ別タイムライン</h3>
+            </div>
+            <dl class="timeline-meta">
+              <div>
+                <dt>戦闘時間</dt>
+                <dd id="battleTime">-</dd>
+              </div>
+              <div>
+                <dt>イベント数</dt>
+                <dd id="eventCount">-</dd>
+              </div>
+              <div>
+                <dt>Boss ID</dt>
+                <dd id="bossId">-</dd>
+              </div>
+              <div class="display-mode-control">
+                <dt>アイコン下</dt>
+                <dd>
+                  <select id="exLabelMode" aria-label="EXアイコン下の表示">
+                    <option value="cost">コスト</option>
+                    <option value="time">時間</option>
+                  </select>
+                </dd>
+              </div>
+            </dl>
+          </div>
+          <div class="timeline-scroll">
+            <div id="timelineChart" class="timeline-chart"></div>
+          </div>
+        </section>
+
+        <section class="event-list-panel" aria-labelledby="event-list-title">
+          <h3 id="event-list-title">時系列一覧</h3>
+          <div class="table-wrap">
+            <table class="event-table">
+              <thead>
+                <tr>
+                  <th>経過</th>
+                  <th>残り</th>
+                  <th>キャラ / イベント</th>
+                  <th>種別</th>
+                  <th>コスト</th>
+                  <th>Wait</th>
+                </tr>
+              </thead>
+              <tbody id="eventTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <div id="detailPopover" class="detail-popover is-hidden" role="tooltip"></div>
+    </main>
+
+    <script src="timeline-data.js"></script>
+    <script src="timeline-renderer.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
