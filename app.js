@@ -16,6 +16,8 @@ const elements = {
   eventCount: document.getElementById("eventCount"),
   bossId: document.getElementById("bossId"),
   exLabelMode: document.getElementById("exLabelMode"),
+  timelineScale: document.getElementById("timelineScale"),
+  timelineScaleValue: document.getElementById("timelineScaleValue"),
   chart: document.getElementById("timelineChart"),
   detailPopover: document.getElementById("detailPopover"),
   tableBody: document.getElementById("eventTableBody"),

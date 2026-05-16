@@ -3,12 +3,15 @@
 function createTimelineRenderer(elements) {
   const nsStorageKey = "timelineViewer.nsSettings.v1";
   const exLabelModeStorageKey = "timelineViewer.exLabelMode.v1";
+  const timelineScaleStorageKey = "timelineViewer.timelineScale.v1";
+  const baseTrackWidth = 780;
   let currentEvents = [];
   let selectedEventId = null;
   let hoverCloseTimer = 0;
   let currentTimeline = null;
   let nsSettings = readNsSettings();
   let exLabelMode = readExLabelMode();
+  let timelineScale = readTimelineScale();
   let isNsInputBound = false;
   let nsRenderTimer = 0;
 
@@ -32,6 +35,12 @@ function createTimelineRenderer(elements) {
     elements.exLabelMode.value = exLabelMode;
     elements.exLabelMode.addEventListener("change", handleExLabelModeChange);
   }
+  if (elements.timelineScale) {
+    elements.timelineScale.value = String(timelineScale);
+    elements.timelineScale.addEventListener("input", handleTimelineScaleInput);
+    elements.timelineScale.addEventListener("change", handleTimelineScaleInput);
+  }
+  applyTimelineScale();
 
   function render(timeline) {
     currentTimeline = timeline;
@@ -67,8 +76,10 @@ function createTimelineRenderer(elements) {
     const gridStep = `${100 / getAxisIntervalCount(timeline.battleTime)}%`;
 
     timeline.lanes.forEach((lane) => {
+      const nsSetting = getNsSetting(lane.key);
       const laneRow = document.createElement("div");
       laneRow.className = "lane";
+      laneRow.classList.toggle("has-ns-lane", nsSetting.enabled);
       laneRow.style.setProperty("--grid-step", gridStep);
 
       const label = document.createElement("div");
@@ -77,13 +88,16 @@ function createTimelineRenderer(elements) {
         <span class="lane-icon-wrap">${renderLaneIcon(lane)}</span>
         <span class="lane-text">
           <span class="lane-name" title="${escapeHtml(lane.name)}">${escapeHtml(lane.name)}</span>
+          ${renderNsControls(lane)}
         </span>
-        ${renderNsControls(lane)}
       `;
       laneRow.appendChild(label);
 
+      const trackStack = document.createElement("div");
+      trackStack.className = "lane-track-stack";
+
       const track = document.createElement("div");
-      track.className = "lane-track";
+      track.className = "lane-track lane-track-main";
       track.dataset.laneKey = lane.key;
 
       timeline.events
@@ -92,22 +106,40 @@ function createTimelineRenderer(elements) {
           track.appendChild(createEventChip(event, timeline.battleTime));
         });
 
-      createNsEvents(lane, timeline.battleTime).forEach((event) => {
-        track.appendChild(createNsEventBar(event, timeline.battleTime));
-      });
+      trackStack.appendChild(track);
 
-      laneRow.appendChild(track);
+      if (nsSetting.enabled) {
+        const nsTrack = document.createElement("div");
+        nsTrack.className = "lane-track lane-track-ns";
+        nsTrack.dataset.laneKey = lane.key;
+        nsTrack.setAttribute("aria-label", `${lane.name} NS`);
+
+        createNsEvents(lane, timeline.battleTime).forEach((event) => {
+          nsTrack.appendChild(createNsEventBar(event, timeline.battleTime));
+        });
+
+        trackStack.appendChild(nsTrack);
+      }
+
+      laneRow.appendChild(trackStack);
       elements.chart.appendChild(laneRow);
     });
   }
 
   function renderNsControls(lane) {
     const setting = getNsSetting(lane.key);
+    const checked = setting.enabled ? " checked" : "";
+    const controlsClass = setting.enabled ? "lane-ns-fields" : "lane-ns-fields is-hidden";
     return `
       <span class="lane-ns-controls" aria-label="${escapeHtml(lane.name)} NS設定">
-        <span class="lane-ns-title">NS</span>
-        <label><input type="text" inputmode="decimal" data-ns-field="interval" data-lane-key="${escapeHtml(lane.key)}" value="${escapeHtml(formatInputNumber(setting.interval))}"><span>秒ごと</span></label>
-        <label><input type="text" inputmode="decimal" data-ns-field="duration" data-lane-key="${escapeHtml(lane.key)}" value="${escapeHtml(formatInputNumber(setting.duration))}"><span>秒間</span></label>
+        <label class="lane-ns-toggle">
+          <input type="checkbox" data-ns-field="enabled" data-lane-key="${escapeHtml(lane.key)}"${checked}>
+          <span>NS</span>
+        </label>
+        <span class="${controlsClass}">
+          <label><input type="text" inputmode="decimal" data-ns-field="interval" data-lane-key="${escapeHtml(lane.key)}" value="${escapeHtml(formatInputNumber(setting.interval))}"><span>秒ごと</span></label>
+          <label><input type="text" inputmode="decimal" data-ns-field="duration" data-lane-key="${escapeHtml(lane.key)}" value="${escapeHtml(formatInputNumber(setting.duration))}"><span>秒間</span></label>
+        </span>
       </span>
     `;
   }
@@ -119,11 +151,19 @@ function createTimelineRenderer(elements) {
     const laneKey = input.dataset.laneKey;
     const field = input.dataset.nsField;
     const setting = getNsSetting(laneKey);
-    setting[field] = parseSecondsInput(input.value);
+    if (field === "enabled") {
+      setting.enabled = input.checked;
+    } else {
+      setting[field] = parseSecondsInput(input.value);
+    }
     nsSettings[laneKey] = setting;
 
     if (currentTimeline) {
-      scheduleNsLayerRender(laneKey);
+      if (field === "enabled") {
+        renderChart(currentTimeline);
+      } else {
+        scheduleNsLayerRender(laneKey);
+      }
       hideDetails();
       syncSelection();
     }
@@ -148,7 +188,7 @@ function createTimelineRenderer(elements) {
     const lane = currentTimeline?.lanes.find((item) => item.key === laneKey);
     if (!lane) return;
 
-    const track = Array.from(elements.chart.querySelectorAll(".lane-track"))
+    const track = Array.from(elements.chart.querySelectorAll(".lane-track-ns"))
       .find((item) => item.dataset.laneKey === laneKey);
     if (!track) return;
 
@@ -223,9 +263,11 @@ function createTimelineRenderer(elements) {
       chip.classList.add("has-duration");
       chip.style.left = `${(event.elapsedTime / battleTime) * 100}%`;
       chip.style.width = `${(duration / battleTime) * 100}%`;
+      chip.style.setProperty("--ex-marker-x", "0px");
     } else {
       chip.style.left = `calc(${(event.elapsedTime / battleTime) * 100}% - 21px)`;
       chip.style.width = "42px";
+      chip.style.setProperty("--ex-marker-x", "21px");
     }
     chip.style.setProperty("--chip-color", event.color);
     chip.title = `${formatSeconds(event.elapsedTime)} / ${event.title}${hasDuration ? ` / 効果 ${formatNumber(duration, "0")}s` : ""}`;
@@ -396,6 +438,8 @@ function createTimelineRenderer(elements) {
 
   function createNsEvents(lane, battleTime) {
     const setting = getNsSetting(lane.key);
+    if (!setting.enabled) return [];
+
     const interval = Number(setting.interval) || 0;
     const duration = Number(setting.duration) || 0;
     if (interval <= 0 || duration <= 0) return [];
@@ -429,10 +473,16 @@ function createTimelineRenderer(elements) {
   }
 
   function getNsSetting(laneKey) {
+    const rawSetting = nsSettings[laneKey] || {};
+    const interval = Number(rawSetting.interval) || 0;
+    const duration = Number(rawSetting.duration) || 0;
+    const delays = normalizeDelayMap(rawSetting.delays);
+    const hasLegacySetting = interval > 0 || duration > 0 || Object.keys(delays).length > 0;
     return {
-      interval: Number(nsSettings[laneKey]?.interval) || 0,
-      duration: Number(nsSettings[laneKey]?.duration) || 0,
-      delays: normalizeDelayMap(nsSettings[laneKey]?.delays),
+      enabled: typeof rawSetting.enabled === "boolean" ? rawSetting.enabled : hasLegacySetting,
+      interval,
+      duration,
+      delays,
     };
   }
 
@@ -504,6 +554,31 @@ function createTimelineRenderer(elements) {
   function readExLabelMode() {
     const value = readLocalSetting(exLabelModeStorageKey);
     return value === "time" ? "time" : "cost";
+  }
+
+  function handleTimelineScaleInput(event) {
+    timelineScale = normalizeTimelineScale(event.target.value);
+    event.target.value = String(timelineScale);
+    writeLocalSetting(timelineScaleStorageKey, String(timelineScale));
+    applyTimelineScale();
+  }
+
+  function applyTimelineScale() {
+    const width = Math.round(baseTrackWidth * timelineScale / 100);
+    elements.chart?.style.setProperty("--timeline-track-width", `${width}px`);
+    if (elements.timelineScaleValue) {
+      elements.timelineScaleValue.textContent = `${timelineScale}%`;
+    }
+  }
+
+  function readTimelineScale() {
+    return normalizeTimelineScale(readLocalSetting(timelineScaleStorageKey));
+  }
+
+  function normalizeTimelineScale(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 100;
+    return Math.min(320, Math.max(80, Math.round(number / 10) * 10));
   }
 
   function formatExIconLabel(event) {

@@ -76,6 +76,13 @@
               </div>
             </dl>
           </div>
+          <div class="timeline-toolbar" aria-label="タイムライン表示設定">
+            <label class="timeline-scale-control">
+              <span>横幅</span>
+              <input id="timelineScale" type="range" min="80" max="320" step="10" value="100" aria-label="タイムライン横幅">
+              <output id="timelineScaleValue" for="timelineScale">100%</output>
+            </label>
+          </div>
           <div class="timeline-scroll">
             <div id="timelineChart" class="timeline-chart"></div>
           </div>
