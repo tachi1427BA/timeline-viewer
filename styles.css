@@ -653,6 +653,10 @@ h3 {
   opacity: 0.62;
 }
 
+.ex-event.has-duration {
+  min-width: 0;
+}
+
 .ex-effect-bar {
   position: absolute;
   top: 3px;
