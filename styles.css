@@ -454,6 +454,34 @@ h3 {
   background: var(--line-strong);
 }
 
+.selection-guides {
+  position: absolute;
+  top: 42px;
+  bottom: 0;
+  left: var(--lane-label-width);
+  z-index: 1;
+  width: calc(100% - var(--lane-label-width));
+  min-width: var(--timeline-track-width);
+  pointer-events: none;
+}
+
+.selection-guides.is-hidden {
+  display: none;
+}
+
+.selection-guide-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid rgba(194, 55, 55, 0.72);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.72);
+}
+
+.selection-guide-line.is-end {
+  border-left-style: dashed;
+}
+
 .lane {
   min-height: 76px;
   border-bottom: 1px solid var(--line);
@@ -598,6 +626,7 @@ h3 {
 .event-chip {
   position: absolute;
   top: 12px;
+  z-index: 2;
   min-width: 76px;
   max-width: 160px;
   height: 42px;
@@ -631,8 +660,10 @@ h3 {
 }
 
 .ex-event {
+  appearance: none;
   position: absolute;
   top: 8px;
+  z-index: 2;
   height: 64px;
   padding: 0;
   background: transparent;
@@ -663,9 +694,9 @@ h3 {
   left: var(--ex-effect-left, 0);
   z-index: 1;
   width: var(--ex-effect-width, 100%);
+  min-width: 0;
   height: 36px;
   background: color-mix(in srgb, var(--chip-color) 72%, white);
-  border: 1px solid color-mix(in srgb, var(--chip-color) 80%, black);
   border-radius: 0;
   opacity: 0.48;
 }
@@ -700,15 +731,17 @@ h3 {
 }
 
 .ns-event {
+  appearance: none;
   position: absolute;
   top: 9px;
   z-index: 2;
-  min-width: 28px;
+  min-width: 0;
   height: 24px;
-  padding: 0 6px;
+  padding: 0;
+  overflow: hidden;
   color: #fff;
   background: rgba(13, 148, 136, 0.66);
-  border: 1px solid #0f766e;
+  border: 0;
   border-radius: 0;
   cursor: pointer;
   font-size: 0.68rem;
@@ -720,13 +753,16 @@ h3 {
 .ns-event:hover,
 .ns-event:focus-visible,
 .ns-event.is-selected {
-  outline: 3px solid rgba(13, 148, 136, 0.24);
-  outline-offset: 2px;
+  outline: 0;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.38);
 }
 
 .ns-event span {
-  position: relative;
-  top: 5px;
+  display: block;
+  padding: 0 2px;
+  overflow: hidden;
+  line-height: 24px;
+  text-overflow: clip;
 }
 
 .ns-delay-control {

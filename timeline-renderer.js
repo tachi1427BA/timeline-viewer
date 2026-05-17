@@ -241,6 +241,7 @@ function createTimelineRenderer(elements) {
     createNsEvents(lane, currentTimeline.battleTime).forEach((event) => {
       track.appendChild(createNsEventBar(event, currentTimeline.battleTime));
     });
+    syncSelection();
   }
 
   function createAxisMarks(axisTrack, battleTime) {
@@ -501,6 +502,91 @@ function createTimelineRenderer(elements) {
     document.querySelectorAll("[data-event-id]").forEach((node) => {
       node.classList.toggle("is-selected", node.dataset.eventId === selectedEventId);
     });
+    renderSelectionGuides();
+  }
+
+  function renderSelectionGuides() {
+    const layer = getSelectionGuideLayer();
+    if (!layer) return;
+
+    layer.innerHTML = "";
+    const timing = getSelectedGuideTiming();
+    if (!timing || !currentTimeline?.battleTime) {
+      layer.classList.add("is-hidden");
+      return;
+    }
+
+    const start = clamp(timing.start, 0, currentTimeline.battleTime);
+    const end = clamp(timing.end, 0, currentTimeline.battleTime);
+    layer.appendChild(createSelectionGuideLine("start", start));
+    if (Math.abs(end - start) > 0.001) {
+      layer.appendChild(createSelectionGuideLine("end", end));
+    }
+    layer.classList.remove("is-hidden");
+  }
+
+  function getSelectionGuideLayer() {
+    if (!elements.chart || !currentTimeline) return null;
+
+    let layer = elements.chart.querySelector(".selection-guides");
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.className = "selection-guides is-hidden";
+      layer.setAttribute("aria-hidden", "true");
+      elements.chart.appendChild(layer);
+    }
+    return layer;
+  }
+
+  function createSelectionGuideLine(edge, time) {
+    const line = document.createElement("span");
+    line.className = `selection-guide-line is-${edge}`;
+    line.style.left = `${(time / currentTimeline.battleTime) * 100}%`;
+    line.title = formatSeconds(time);
+    return line;
+  }
+
+  function getSelectedGuideTiming() {
+    if (!selectedEventId || !currentTimeline) return null;
+
+    const event = currentEvents.find((item) => item.id === selectedEventId);
+    if (event) return getEventGuideTiming(event);
+
+    const selectedNode = Array.from(elements.chart.querySelectorAll("[data-event-id]"))
+      .find((node) => node.dataset.eventId === selectedEventId);
+    if (!selectedNode?.classList.contains("ns-event")) return null;
+
+    const lane = currentTimeline.lanes.find((item) => item.key === selectedNode.dataset.laneKey);
+    if (!lane) return null;
+
+    const nsEvent = createNsEvents(lane, currentTimeline.battleTime)
+      .find((item) => item.id === selectedEventId || String(item.nsIndex) === selectedNode.dataset.nsIndex);
+    return nsEvent ? getEventGuideTiming(nsEvent) : null;
+  }
+
+  function getEventGuideTiming(event) {
+    if (event.kind === "NS") {
+      return {
+        start: event.elapsedTime,
+        end: event.elapsedTime + event.duration,
+      };
+    }
+
+    if (event.typeIndex === 0) {
+      const landingTime = event.elapsedTime + getExLandingOffset(event.laneKey);
+      const effectDuration = Math.min(getAdjustedExEffectTime(event), Math.max(0, currentTimeline.battleTime - landingTime));
+      if (effectDuration > 0) {
+        return {
+          start: landingTime,
+          end: landingTime + effectDuration,
+        };
+      }
+    }
+
+    return {
+      start: event.elapsedTime,
+      end: event.elapsedTime,
+    };
   }
 
   function showEmpty() {
@@ -864,6 +950,12 @@ function normalizePositiveNumber(value) {
 function normalizeSignedNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+function clamp(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.min(max, Math.max(min, number));
 }
 
 function renderIconImage(item, className) {
