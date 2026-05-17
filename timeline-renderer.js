@@ -2,6 +2,8 @@
 
 function createTimelineRenderer(elements) {
   const nsStorageKey = "timelineViewer.nsSettings.v1";
+  const exLandingOffsetStorageKey = "timelineViewer.exLandingOffsets.v1";
+  const exEffectAdjustmentStorageKey = "timelineViewer.exEffectAdjustments.v1";
   const exLabelModeStorageKey = "timelineViewer.exLabelMode.v1";
   const timelineScaleStorageKey = "timelineViewer.timelineScale.v1";
   const baseTrackWidth = 780;
@@ -10,9 +12,11 @@ function createTimelineRenderer(elements) {
   let hoverCloseTimer = 0;
   let currentTimeline = null;
   let nsSettings = readNsSettings();
+  let exLandingOffsets = readExLandingOffsets();
+  let exEffectAdjustments = readExEffectAdjustments();
   let exLabelMode = readExLabelMode();
   let timelineScale = readTimelineScale();
-  let isNsInputBound = false;
+  let isChartInputBound = false;
   let nsRenderTimer = 0;
 
   document.addEventListener("keydown", (event) => {
@@ -88,6 +92,8 @@ function createTimelineRenderer(elements) {
         <span class="lane-icon-wrap">${renderLaneIcon(lane)}</span>
         <span class="lane-text">
           <span class="lane-name" title="${escapeHtml(lane.name)}">${escapeHtml(lane.name)}</span>
+          ${renderExLandingOffsetControl(lane)}
+          ${renderExEffectAdjustmentControl(lane)}
           ${renderNsControls(lane)}
         </span>
       `;
@@ -144,6 +150,28 @@ function createTimelineRenderer(elements) {
     `;
   }
 
+  function renderExLandingOffsetControl(lane) {
+    const offset = getExLandingOffset(lane.key);
+    return `
+      <label class="lane-ex-landing-control">
+        <span>EX着弾 +</span>
+        <input type="text" inputmode="decimal" data-ex-landing-offset="true" data-lane-key="${escapeHtml(lane.key)}" value="${escapeHtml(formatInputNumber(offset))}">
+        <span>秒</span>
+      </label>
+    `;
+  }
+
+  function renderExEffectAdjustmentControl(lane) {
+    const adjustment = getExEffectAdjustment(lane.key);
+    return `
+      <label class="lane-ex-effect-adjustment-control">
+        <span>EX効果 ±</span>
+        <input type="text" inputmode="decimal" data-ex-effect-adjustment="true" data-lane-key="${escapeHtml(lane.key)}" value="${escapeHtml(formatSignedInputNumber(adjustment))}">
+        <span>秒</span>
+      </label>
+    `;
+  }
+
   function handleNsInput(event) {
     const input = event.target.closest?.("input[data-ns-field]");
     if (!input) return;
@@ -177,11 +205,28 @@ function createTimelineRenderer(elements) {
   }
 
   function bindNsInputs() {
-    if (isNsInputBound) return;
+    if (isChartInputBound) return;
 
     elements.chart.addEventListener("input", handleNsInput);
     elements.chart.addEventListener("change", handleNsInput);
-    isNsInputBound = true;
+    elements.chart.addEventListener("input", handleExLandingOffsetInput);
+    elements.chart.addEventListener("change", handleExLandingOffsetInput);
+    elements.chart.addEventListener("input", handleExEffectAdjustmentInput);
+    elements.chart.addEventListener("change", handleExEffectAdjustmentInput);
+    isChartInputBound = true;
+  }
+
+  function renderMainLayer(laneKey) {
+    const track = Array.from(elements.chart.querySelectorAll(".lane-track-main"))
+      .find((item) => item.dataset.laneKey === laneKey);
+    if (!track || !currentTimeline) return;
+
+    track.innerHTML = "";
+    currentTimeline.events
+      .filter((event) => event.laneKey === laneKey)
+      .forEach((event) => {
+        track.appendChild(createEventChip(event, currentTimeline.battleTime));
+      });
   }
 
   function renderNsLayer(laneKey) {
@@ -253,24 +298,30 @@ function createTimelineRenderer(elements) {
 
   function createExEventChip(event, battleTime) {
     const chip = document.createElement("button");
-    const duration = Math.min(event.exEffectTime, Math.max(0, battleTime - event.elapsedTime));
-    const hasDuration = duration > 0;
+    const landingOffset = getExLandingOffset(event.laneKey);
+    const landingTime = event.elapsedTime + landingOffset;
+    const adjustedExEffectTime = getAdjustedExEffectTime(event);
+    const effectDuration = Math.min(adjustedExEffectTime, Math.max(0, battleTime - landingTime));
+    const hasDuration = effectDuration > 0;
 
     chip.type = "button";
     chip.className = `ex-event ${event.canUsable ? "" : "is-disabled"}`;
     chip.dataset.eventId = event.id;
     if (hasDuration) {
+      const spanDuration = landingOffset + effectDuration;
       chip.classList.add("has-duration");
       chip.style.left = `${(event.elapsedTime / battleTime) * 100}%`;
-      chip.style.width = `${(duration / battleTime) * 100}%`;
+      chip.style.width = `${(spanDuration / battleTime) * 100}%`;
       chip.style.setProperty("--ex-marker-x", "0px");
+      chip.style.setProperty("--ex-effect-left", `${(landingOffset / spanDuration) * 100}%`);
+      chip.style.setProperty("--ex-effect-width", `${(effectDuration / spanDuration) * 100}%`);
     } else {
       chip.style.left = `calc(${(event.elapsedTime / battleTime) * 100}% - 21px)`;
       chip.style.width = "42px";
       chip.style.setProperty("--ex-marker-x", "21px");
     }
     chip.style.setProperty("--chip-color", event.color);
-    chip.title = `${formatSeconds(event.elapsedTime)} / ${event.title}${hasDuration ? ` / 効果 ${formatNumber(duration, "0")}s` : ""}`;
+    chip.title = `${formatSeconds(event.elapsedTime)} / ${event.title}${landingOffset > 0 ? ` / 着弾 ${formatSeconds(landingTime)}` : ""}${hasDuration ? ` / 効果 ${formatNumber(effectDuration, "0")}s` : ""}`;
 
     if (hasDuration) {
       const effectBar = document.createElement("span");
@@ -402,7 +453,8 @@ function createTimelineRenderer(elements) {
         <dt>キャラ</dt><dd>${escapeHtml(event.characterName)}${event.characterId === null ? "" : ` (ID: ${event.characterId})`}</dd>
         <dt>IconName</dt><dd>${escapeHtml(event.iconName || "-")}</dd>
         <dt>種別</dt><dd>${escapeHtml(formatType(event))}</dd>
-        <dt>EX効果時間</dt><dd>${escapeHtml(event.typeIndex === 0 && event.exEffectTime > 0 ? `${formatNumber(event.exEffectTime, "-")}s` : "-")}</dd>
+        ${renderExEffectDetailRows(event)}
+        ${renderExLandingDetailRows(event)}
         <dt>説明</dt><dd>${escapeHtml(event.description || "-")}</dd>
         <dt>発動時コスト</dt><dd>${escapeHtml(formatNumber(event.remainCost, "-"))}</dd>
         <dt>OverrideCost</dt><dd>${escapeHtml(formatNumber(event.overrideCost, "-"))}</dd>
@@ -412,6 +464,31 @@ function createTimelineRenderer(elements) {
         <dt>Cost設定</dt><dd>${event.isOverrideCostSet ? "明示" : "未設定"}</dd>
         <dt>Self</dt><dd>${event.isSelf ? "true" : "false"}</dd>
       </dl>
+    `;
+  }
+
+  function renderExEffectDetailRows(event) {
+    if (event.typeIndex !== 0) {
+      return `<dt>EX効果時間</dt><dd>-</dd>`;
+    }
+
+    const adjustment = getExEffectAdjustment(event.laneKey);
+    const adjusted = getAdjustedExEffectTime(event);
+    return `
+        <dt>EX効果時間</dt><dd>${escapeHtml(event.exEffectTime > 0 ? `${formatNumber(event.exEffectTime, "-")}s` : "-")}</dd>
+        <dt>EX効果補正</dt><dd>${escapeHtml(formatSignedNumber(adjustment))}s</dd>
+        <dt>補正後EX効果</dt><dd>${escapeHtml(formatNumber(adjusted, "0"))}s</dd>
+    `;
+  }
+
+  function renderExLandingDetailRows(event) {
+    if (event.typeIndex !== 0) return "";
+
+    const offset = getExLandingOffset(event.laneKey);
+    const landingTime = event.elapsedTime + offset;
+    return `
+        <dt>EX着弾オフセット</dt><dd>${escapeHtml(formatNumber(offset, "0"))}s</dd>
+        <dt>着弾時刻</dt><dd>${escapeHtml(formatSeconds(landingTime))}</dd>
     `;
   }
 
@@ -511,6 +588,50 @@ function createTimelineRenderer(elements) {
     writeNsSettings(nsSettings);
   }
 
+  function handleExLandingOffsetInput(event) {
+    const input = event.target.closest?.("input[data-ex-landing-offset]");
+    if (!input) return;
+
+    const laneKey = input.dataset.laneKey;
+    const offset = parseSecondsInput(input.value);
+
+    if (offset > 0) {
+      exLandingOffsets[laneKey] = offset;
+    } else {
+      delete exLandingOffsets[laneKey];
+    }
+
+    if (currentTimeline) {
+      renderMainLayer(laneKey);
+      hideDetails();
+      syncSelection();
+    }
+
+    writeExLandingOffsets(exLandingOffsets);
+  }
+
+  function handleExEffectAdjustmentInput(event) {
+    const input = event.target.closest?.("input[data-ex-effect-adjustment]");
+    if (!input) return;
+
+    const laneKey = input.dataset.laneKey;
+    const adjustment = parseSignedSecondsInput(input.value);
+
+    if (adjustment !== 0) {
+      exEffectAdjustments[laneKey] = adjustment;
+    } else {
+      delete exEffectAdjustments[laneKey];
+    }
+
+    if (currentTimeline) {
+      renderMainLayer(laneKey);
+      hideDetails();
+      syncSelection();
+    }
+
+    writeExEffectAdjustments(exEffectAdjustments);
+  }
+
   function readNsSettings() {
     try {
       const parsed = JSON.parse(readLocalSetting(nsStorageKey) || "{}");
@@ -522,6 +643,56 @@ function createTimelineRenderer(elements) {
 
   function writeNsSettings(settings) {
     writeLocalSetting(nsStorageKey, JSON.stringify(settings));
+  }
+
+  function getExLandingOffset(laneKey) {
+    return normalizePositiveNumber(exLandingOffsets[laneKey]);
+  }
+
+  function readExLandingOffsets() {
+    try {
+      const parsed = JSON.parse(readLocalSetting(exLandingOffsetStorageKey) || "{}");
+      if (!parsed || typeof parsed !== "object") return {};
+
+      return Object.fromEntries(
+        Object.entries(parsed)
+          .map(([key, value]) => [key, normalizePositiveNumber(value)])
+          .filter(([, value]) => value > 0)
+      );
+    } catch {
+      return {};
+    }
+  }
+
+  function writeExLandingOffsets(offsets) {
+    writeLocalSetting(exLandingOffsetStorageKey, JSON.stringify(offsets));
+  }
+
+  function getExEffectAdjustment(laneKey) {
+    return normalizeSignedNumber(exEffectAdjustments[laneKey]);
+  }
+
+  function getAdjustedExEffectTime(event) {
+    return Math.max(0, (Number(event.exEffectTime) || 0) + getExEffectAdjustment(event.laneKey));
+  }
+
+  function readExEffectAdjustments() {
+    try {
+      const parsed = JSON.parse(readLocalSetting(exEffectAdjustmentStorageKey) || "{}");
+      if (!parsed || typeof parsed !== "object") return {};
+
+      return Object.fromEntries(
+        Object.entries(parsed)
+          .map(([key, value]) => [key, normalizeSignedNumber(value)])
+          .filter(([, value]) => value !== 0)
+      );
+    } catch {
+      return {};
+    }
+  }
+
+  function writeExEffectAdjustments(adjustments) {
+    writeLocalSetting(exEffectAdjustmentStorageKey, JSON.stringify(adjustments));
   }
 
   function readLocalSetting(key) {
@@ -651,6 +822,18 @@ function formatInputNumber(value) {
   return String(Number(value)).replace(/\.0$/, "");
 }
 
+function formatSignedInputNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number === 0) return "";
+  return `${number > 0 ? "+" : ""}${formatNumber(number, "0")}`;
+}
+
+function formatSignedNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number === 0) return "0";
+  return `${number > 0 ? "+" : ""}${formatNumber(number, "0")}`;
+}
+
 function parseSecondsInput(value) {
   const normalized = String(value ?? "")
     .trim()
@@ -659,6 +842,28 @@ function parseSecondsInput(value) {
     .replace(/,/g, ".");
   const number = Number(normalized);
   return Number.isFinite(number) ? Math.max(0, number) : 0;
+}
+
+function parseSignedSecondsInput(value) {
+  const normalized = String(value ?? "")
+    .trim()
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[＋]/g, "+")
+    .replace(/[－ー−―]/g, "-")
+    .replace(/[，、]/g, ".")
+    .replace(/,/g, ".");
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function normalizePositiveNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, number) : 0;
+}
+
+function normalizeSignedNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
 }
 
 function renderIconImage(item, className) {

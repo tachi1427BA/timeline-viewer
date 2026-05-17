@@ -507,6 +507,33 @@ h3 {
   font-size: 0.76rem;
 }
 
+.lane-ex-landing-control,
+.lane-ex-effect-adjustment-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.lane-ex-landing-control input,
+.lane-ex-effect-adjustment-control input {
+  width: 100%;
+  min-width: 0;
+  min-height: 22px;
+  padding: 2px 5px;
+  color: var(--text);
+  background: #fbfcfe;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  font: inherit;
+  font-weight: 900;
+}
+
 .lane-ns-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -629,9 +656,9 @@ h3 {
 .ex-effect-bar {
   position: absolute;
   top: 3px;
-  left: 0;
+  left: var(--ex-effect-left, 0);
   z-index: 1;
-  width: 100%;
+  width: var(--ex-effect-width, 100%);
   height: 36px;
   background: color-mix(in srgb, var(--chip-color) 72%, white);
   border: 1px solid color-mix(in srgb, var(--chip-color) 80%, black);
