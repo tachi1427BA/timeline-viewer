@@ -640,6 +640,10 @@ h3 {
   text-align: left;
 }
 
+.event-chip.has-target {
+  padding-right: 30px;
+}
+
 .lane-icon,
 .event-icon {
   display: inline-grid;
@@ -717,6 +721,61 @@ h3 {
   box-shadow: 0 8px 16px rgba(16, 33, 52, 0.2);
 }
 
+.ex-event.is-rio-copy-ex .ex-icon-marker {
+  box-shadow:
+    0 0 0 2px rgba(165, 243, 252, 0.72),
+    0 0 18px rgba(77, 208, 255, 0.62),
+    0 8px 16px rgba(16, 33, 52, 0.2);
+}
+
+.ex-icon-core {
+  position: relative;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.ex-event.is-rio-copy-ex .ex-icon-core {
+  background:
+    radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.62), transparent 26%),
+    linear-gradient(135deg, rgba(46, 230, 255, 0.72), rgba(46, 230, 255, 0.36) 54%, rgba(166, 255, 255, 0.5)),
+    var(--chip-color);
+}
+
+.ex-event.is-rio-copy-ex .ex-icon-core::before,
+.ex-event.is-rio-copy-ex .ex-icon-core::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: 999px;
+}
+
+.ex-event.is-rio-copy-ex .ex-icon-core::before {
+  inset: 0;
+  z-index: 2;
+  background:
+    linear-gradient(180deg, rgba(46, 230, 255, 0.42), rgba(46, 230, 255, 0.42)),
+    radial-gradient(circle at 14% 24%, rgba(255, 255, 255, 0.18) 0 1px, transparent 2px),
+    radial-gradient(circle at 68% 72%, rgba(255, 255, 255, 0.14) 0 1px, transparent 2px);
+  background-size: auto, 7px 9px, 11px 13px;
+  mix-blend-mode: color;
+  opacity: 0.88;
+}
+
+.ex-event.is-rio-copy-ex .ex-icon-core::after {
+  inset: 0;
+  z-index: 3;
+  background:
+    repeating-linear-gradient(180deg, rgba(166, 255, 255, 0.36) 0 1px, transparent 1px 4px),
+    linear-gradient(112deg, transparent 24%, rgba(255, 255, 255, 0.34) 43%, rgba(166, 255, 255, 0.28) 50%, transparent 66%);
+  opacity: 0.72;
+  mix-blend-mode: screen;
+}
+
 .ex-event:hover .ex-icon-marker,
 .ex-event:focus-visible .ex-icon-marker,
 .ex-event.is-selected .ex-icon-marker {
@@ -725,9 +784,58 @@ h3 {
 }
 
 .ex-icon-marker .event-icon {
+  position: relative;
+  z-index: 1;
   width: 36px;
   height: 36px;
   border: 0;
+}
+
+.ex-event.is-rio-copy-ex .event-icon {
+  opacity: 0.88;
+  filter: saturate(1.08) contrast(1.05) brightness(1.02);
+}
+
+.target-icon-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  z-index: 4;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  overflow: hidden;
+  background: #fff;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 3px 8px rgba(16, 33, 52, 0.24);
+  pointer-events: none;
+}
+
+.event-target-badge {
+  right: 5px;
+  bottom: 5px;
+  width: 20px;
+  height: 20px;
+}
+
+.target-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #dce5ee;
+  border: 0;
+  border-radius: 999px;
+}
+
+.target-icon.icon-fallback {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 900;
 }
 
 .ns-event {
@@ -777,7 +885,8 @@ h3 {
   font-weight: 800;
 }
 
-.ns-delay-control input {
+.ns-delay-control input,
+.ex-event-effect-control input {
   width: 100%;
   min-height: 28px;
   padding: 3px 7px;
@@ -787,6 +896,18 @@ h3 {
   border-radius: 5px;
   font: inherit;
   font-weight: 900;
+}
+
+.ex-event-effect-control {
+  display: inline-grid;
+  grid-template-columns: minmax(72px, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  max-width: 150px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 800;
 }
 
 .ex-cost-label {

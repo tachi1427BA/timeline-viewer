@@ -4,6 +4,7 @@ function createTimelineRenderer(elements) {
   const nsStorageKey = "timelineViewer.nsSettings.v1";
   const exLandingOffsetStorageKey = "timelineViewer.exLandingOffsets.v1";
   const exEffectAdjustmentStorageKey = "timelineViewer.exEffectAdjustments.v1";
+  const rioCopyExDurationStorageKey = "timelineViewer.rioCopyExDurations.v1";
   const exLabelModeStorageKey = "timelineViewer.exLabelMode.v1";
   const timelineScaleStorageKey = "timelineViewer.timelineScale.v1";
   const baseTrackWidth = 780;
@@ -14,6 +15,7 @@ function createTimelineRenderer(elements) {
   let nsSettings = readNsSettings();
   let exLandingOffsets = readExLandingOffsets();
   let exEffectAdjustments = readExEffectAdjustments();
+  let rioCopyExDurations = readRioCopyExDurations();
   let exLabelMode = readExLabelMode();
   let timelineScale = readTimelineScale();
   let isChartInputBound = false;
@@ -33,6 +35,8 @@ function createTimelineRenderer(elements) {
 
   elements.detailPopover?.addEventListener("input", handleNsDelayInput);
   elements.detailPopover?.addEventListener("change", handleNsDelayInput);
+  elements.detailPopover?.addEventListener("input", handleRioCopyExDurationInput);
+  elements.detailPopover?.addEventListener("change", handleRioCopyExDurationInput);
   elements.detailPopover?.addEventListener("mouseenter", () => window.clearTimeout(hoverCloseTimer));
   elements.detailPopover?.addEventListener("mouseleave", scheduleHideDetails);
   if (elements.exLabelMode) {
@@ -267,8 +271,10 @@ function createTimelineRenderer(elements) {
     }
 
     const chip = document.createElement("button");
+    const targetBadge = renderTargetIconBadge(event, "event-target-badge");
     chip.type = "button";
     chip.className = `event-chip ${event.typeIndex === 1 ? "event-type-event" : ""} ${event.canUsable ? "" : "is-disabled"}`;
+    chip.classList.toggle("has-target", Boolean(targetBadge));
     chip.dataset.eventId = event.id;
     chip.style.left = `calc(${(event.elapsedTime / battleTime) * 100}% - 12px)`;
     chip.style.setProperty("--chip-color", event.typeIndex === 0 ? event.color : "var(--event)");
@@ -276,6 +282,7 @@ function createTimelineRenderer(elements) {
     chip.innerHTML = `
       <span class="chip-time">${escapeHtml(formatSeconds(event.elapsedTime))}</span>
       <span class="chip-title">${escapeHtml(formatChipTitle(event))}</span>
+      ${targetBadge}
     `;
 
     attachDetailTriggers(chip, event);
@@ -304,10 +311,16 @@ function createTimelineRenderer(elements) {
     const adjustedExEffectTime = getAdjustedExEffectTime(event);
     const effectDuration = Math.min(adjustedExEffectTime, Math.max(0, battleTime - landingTime));
     const hasDuration = effectDuration > 0;
+    const rioCopyOrdinal = getRioCopyExOrdinal(event);
+    const isRioCopy = rioCopyOrdinal > 0;
 
     chip.type = "button";
     chip.className = `ex-event ${event.canUsable ? "" : "is-disabled"}`;
+    chip.classList.toggle("is-rio-copy-ex", isRioCopy);
     chip.dataset.eventId = event.id;
+    if (isRioCopy) {
+      chip.dataset.rioCopyOrdinal = String(rioCopyOrdinal);
+    }
     if (hasDuration) {
       const spanDuration = landingOffset + effectDuration;
       chip.classList.add("has-duration");
@@ -322,7 +335,7 @@ function createTimelineRenderer(elements) {
       chip.style.setProperty("--ex-marker-x", "21px");
     }
     chip.style.setProperty("--chip-color", event.color);
-    chip.title = `${formatSeconds(event.elapsedTime)} / ${event.title}${landingOffset > 0 ? ` / 着弾 ${formatSeconds(landingTime)}` : ""}${hasDuration ? ` / 効果 ${formatNumber(effectDuration, "0")}s` : ""}`;
+    chip.title = `${formatSeconds(event.elapsedTime)} / ${event.title}${isRioCopy ? ` / コピーEX ${rioCopyOrdinal}回目` : ""}${landingOffset > 0 ? ` / 着弾 ${formatSeconds(landingTime)}` : ""}${hasDuration ? ` / 効果 ${formatNumber(effectDuration, "0")}s` : ""}`;
 
     if (hasDuration) {
       const effectBar = document.createElement("span");
@@ -332,7 +345,7 @@ function createTimelineRenderer(elements) {
 
     const marker = document.createElement("span");
     marker.className = "ex-icon-marker";
-    marker.innerHTML = renderIconImage(event, "event-icon");
+    marker.innerHTML = `<span class="ex-icon-core">${renderIconImage(event, "event-icon")}</span>${renderTargetIconBadge(event, "ex-target-badge")}`;
     chip.appendChild(marker);
 
     const costLabel = document.createElement("span");
@@ -473,6 +486,15 @@ function createTimelineRenderer(elements) {
       return `<dt>EX効果時間</dt><dd>-</dd>`;
     }
 
+    const rioCopyOrdinal = getRioCopyExOrdinal(event);
+    if (rioCopyOrdinal > 0) {
+      const duration = getRioCopyExDuration(event);
+      return `
+        <dt>コピーEX</dt><dd>リオEX ${rioCopyOrdinal}回目</dd>
+        <dt>コピーEX効果</dt><dd><label class="ex-event-effect-control"><input type="text" inputmode="decimal" data-rio-copy-ex-duration="true" data-event-id="${escapeHtml(event.id)}" value="${escapeHtml(formatInputNumber(duration))}"><span>秒</span></label></dd>
+      `;
+    }
+
     const adjustment = getExEffectAdjustment(event.laneKey);
     const adjusted = getAdjustedExEffectTime(event);
     return `
@@ -491,6 +513,27 @@ function createTimelineRenderer(elements) {
         <dt>EX着弾オフセット</dt><dd>${escapeHtml(formatNumber(offset, "0"))}s</dd>
         <dt>着弾時刻</dt><dd>${escapeHtml(formatSeconds(landingTime))}</dd>
     `;
+  }
+
+  function renderTargetIconBadge(event, className) {
+    const target = getTargetCharacter(event);
+    if (!target) return "";
+
+    return `<span class="target-icon-badge ${className}" title="対象: ${escapeHtml(target.name)}">${renderIconImage(target, "target-icon")}</span>`;
+  }
+
+  function getTargetCharacter(event) {
+    const targetId = Number(event.targetId);
+    if (!Number.isFinite(targetId) || targetId <= 0) return null;
+
+    const lane = currentTimeline?.lanes.find((item) => Number(item.id) === targetId);
+    if (lane) return lane;
+
+    return {
+      id: targetId,
+      name: `ID:${targetId}`,
+      iconUrl: `assets/character-icons/cicon_${String(Math.trunc(targetId)).padStart(3, "0")}.png`,
+    };
   }
 
   function selectEvent(eventId) {
@@ -718,6 +761,31 @@ function createTimelineRenderer(elements) {
     writeExEffectAdjustments(exEffectAdjustments);
   }
 
+  function handleRioCopyExDurationInput(event) {
+    const input = event.target.closest?.("input[data-rio-copy-ex-duration]");
+    if (!input) return;
+
+    const sourceEvent = currentEvents.find((item) => item.id === input.dataset.eventId);
+    if (!sourceEvent || getRioCopyExOrdinal(sourceEvent) === 0) return;
+
+    const key = getRioCopyExDurationKey(sourceEvent);
+    const duration = parseSecondsInput(input.value);
+
+    if (duration > 0) {
+      rioCopyExDurations[key] = duration;
+    } else {
+      delete rioCopyExDurations[key];
+    }
+
+    if (currentTimeline) {
+      renderMainLayer(sourceEvent.laneKey);
+      selectedEventId = sourceEvent.id;
+      syncSelection();
+    }
+
+    writeRioCopyExDurations(rioCopyExDurations);
+  }
+
   function readNsSettings() {
     try {
       const parsed = JSON.parse(readLocalSetting(nsStorageKey) || "{}");
@@ -759,7 +827,42 @@ function createTimelineRenderer(elements) {
   }
 
   function getAdjustedExEffectTime(event) {
+    if (getRioCopyExOrdinal(event) > 0) {
+      return getRioCopyExDuration(event);
+    }
+
     return Math.max(0, (Number(event.exEffectTime) || 0) + getExEffectAdjustment(event.laneKey));
+  }
+
+  function getRioCopyExDuration(event) {
+    return normalizePositiveNumber(rioCopyExDurations[getRioCopyExDurationKey(event)]);
+  }
+
+  function getRioCopyExDurationKey(event) {
+    return `${event.laneKey}:${getRioCopyExOrdinal(event)}`;
+  }
+
+  function getRioCopyExOrdinal(event) {
+    if (!isRioExEvent(event) || !currentTimeline) return 0;
+
+    let ordinal = 0;
+    for (const item of currentTimeline.events) {
+      if (!isRioExEvent(item) || item.laneKey !== event.laneKey) continue;
+
+      ordinal += 1;
+      if (item.id === event.id) {
+        return ordinal % 2 === 0 ? ordinal : 0;
+      }
+    }
+
+    return 0;
+  }
+
+  function isRioExEvent(event) {
+    if (!event || event.typeIndex !== 0) return false;
+
+    const text = `${event.characterName || ""} ${event.iconName || ""}`.toLowerCase();
+    return text.includes("リオ") || text.includes("rio");
   }
 
   function readExEffectAdjustments() {
@@ -779,6 +882,25 @@ function createTimelineRenderer(elements) {
 
   function writeExEffectAdjustments(adjustments) {
     writeLocalSetting(exEffectAdjustmentStorageKey, JSON.stringify(adjustments));
+  }
+
+  function readRioCopyExDurations() {
+    try {
+      const parsed = JSON.parse(readLocalSetting(rioCopyExDurationStorageKey) || "{}");
+      if (!parsed || typeof parsed !== "object") return {};
+
+      return Object.fromEntries(
+        Object.entries(parsed)
+          .map(([key, value]) => [key, normalizePositiveNumber(value)])
+          .filter(([, value]) => value > 0)
+      );
+    } catch {
+      return {};
+    }
+  }
+
+  function writeRioCopyExDurations(durations) {
+    writeLocalSetting(rioCopyExDurationStorageKey, JSON.stringify(durations));
   }
 
   function readLocalSetting(key) {
